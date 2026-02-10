@@ -9,7 +9,9 @@
       "Bash(git commit:*)",
       "Bash(./lint.sh:*)",
       "Bash(ls:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(vendor/bin/phpcs:*)",
+      "Bash(src/Controllers/UserController.php << 'EOF'\n\n    // Nueva función con errores intencionales\n    public function testLinter\\($param1,$param2\\){\n        $result=$param1+$param2\n        if\\($result>10\\){return true}\n        return false;\n    }\n}\nEOF)"
     ]
   }
 }

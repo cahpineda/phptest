@@ -8,9 +8,18 @@
 # Este script detecta archivos modificados o en stage y ejecuta
 # los linters apropiados solo en esos archivos.
 #
-# Uso: ./lint.sh
+# Uso:
+#   ./lint.sh           # Modo resumen (por defecto)
+#   ./lint.sh --verbose # Modo detallado (muestra todo)
+#   ./lint.sh -v        # Alias de --verbose
 
 set -e  # Exit on error (except where we handle it)
+
+# Parse arguments
+VERBOSE=0
+if [[ "$1" == "--verbose" ]] || [[ "$1" == "-v" ]]; then
+    VERBOSE=1
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -128,15 +137,58 @@ lint_php_files() {
         file_args+=("$PROJECT_ROOT/$file")
     done
 
-    # Run PHPCS
-    if "$PHPCS_BIN" --standard="$CONFIG_PHPCS" "${file_args[@]}" 2>&1; then
+    # Run PHPCS and capture output
+    local output
+    local exit_code
+    set +e  # Temporarily disable exit on error
+    output=$("$PHPCS_BIN" --standard="$CONFIG_PHPCS" "${file_args[@]}" 2>&1)
+    exit_code=$?
+    set -e  # Re-enable exit on error
+
+    if [[ $exit_code -eq 0 ]]; then
         print_success "✓ Todos los archivos PHP pasaron las validaciones"
         return 0
     else
         has_errors=1
         error_list+=("PHP")
+
+        if [[ $VERBOSE -eq 1 ]]; then
+            # Modo verbose: mostrar todo
+            echo "$output"
+        else
+            # Modo resumen: extraer y mostrar solo lo importante
+            show_php_summary "$output"
+        fi
         return 1
     fi
+}
+
+show_php_summary() {
+    local output="$1"
+
+    echo ""
+    print_warning "⚠️  Resumen de errores PHP:"
+    echo ""
+
+    # Extraer información de cada archivo
+    while IFS= read -r line; do
+        if [[ "$line" =~ FILE:.*/(.*) ]]; then
+            local file="${BASH_REMATCH[1]}"
+            echo "  📄 $file"
+        elif [[ "$line" =~ FOUND[[:space:]]+([0-9]+)[[:space:]]+ERROR.*AFFECTING[[:space:]]+([0-9]+)[[:space:]]+LINE ]]; then
+            local errors="${BASH_REMATCH[1]}"
+            local lines="${BASH_REMATCH[2]}"
+            echo "     ├─ $errors errores en $lines líneas"
+        elif [[ "$line" =~ PHPCBF[[:space:]]+CAN[[:space:]]+FIX.*([0-9]+)[[:space:]]+MARKED ]]; then
+            local fixable="${BASH_REMATCH[1]}"
+            print_info "     └─ ✨ $fixable errores se pueden auto-arreglar"
+        fi
+    done <<< "$output"
+
+    echo ""
+    print_info "💡 Para ver detalles completos: ./lint.sh --verbose"
+    print_info "💡 Para auto-arreglar: vendor/bin/phpcbf --standard=config/phpcs.xml <archivo>"
+    echo ""
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -155,17 +207,72 @@ lint_js_files() {
     fi
 
     local js_has_errors=0
+    declare -a js_errors_summary
 
     for file in "${js_files[@]}"; do
-        lint_single_js_file "$file" || js_has_errors=1
+        local file_output
+        file_output=$(lint_single_js_file "$file" 2>&1) || true
+        local file_exit_code=$?
+
+        if [[ $file_exit_code -ne 0 ]]; then
+            js_has_errors=1
+            js_errors_summary+=("$file|$file_output")
+        fi
     done
 
     if [[ $js_has_errors -eq 0 ]]; then
         print_success "✓ Todos los archivos JS pasaron las validaciones"
         return 0
     else
+        if [[ $VERBOSE -eq 0 ]]; then
+            show_js_summary "${js_errors_summary[@]}"
+        fi
         return 1
     fi
+}
+
+show_js_summary() {
+    echo ""
+    print_warning "⚠️  Resumen de errores JavaScript:"
+    echo ""
+
+    for entry in "$@"; do
+        IFS='|' read -r file output <<< "$entry"
+
+        echo "  📄 $file"
+
+        # Contar errores y warnings
+        local error_count=$(echo "$output" | grep -c "error" || echo 0)
+        local warning_count=$(echo "$output" | grep -c "warning" || echo 0)
+
+        if [[ $error_count -gt 0 ]]; then
+            echo "     ├─ $error_count errores"
+        fi
+        if [[ $warning_count -gt 0 ]]; then
+            echo "     ├─ $warning_count warnings"
+        fi
+
+        # Mostrar primeras 3 líneas de error
+        local line_num=0
+        while IFS= read -r line; do
+            if [[ "$line" =~ [0-9]+:[0-9]+.*error ]]; then
+                if [[ $line_num -lt 3 ]]; then
+                    echo "     │  $line"
+                    ((line_num++))
+                fi
+            fi
+        done <<< "$output"
+
+        if [[ $error_count -gt 3 ]]; then
+            echo "     └─ ... y $((error_count - 3)) errores más"
+        else
+            echo "     └─"
+        fi
+        echo ""
+    done
+
+    print_info "💡 Para ver detalles completos: ./lint.sh --verbose"
+    echo ""
 }
 
 lint_single_js_file() {
@@ -188,31 +295,50 @@ lint_single_js_file() {
         temp_file=$(mktemp)
         tail -n +$((php_header_lines + 1)) "$full_path" > "$temp_file"
 
-        print_info "  → $file (contiene <?php header, líneas PHP: $php_header_lines)"
+        if [[ $VERBOSE -eq 1 ]]; then
+            print_info "  → $file (contiene <?php header, líneas PHP: $php_header_lines)"
+        fi
 
         # Run ESLint on temp file
-        if "$ESLINT_BIN" -c "$CONFIG_ESLINT" "$temp_file" 2>&1; then
-            rm -f "$temp_file"
+        local output
+        output=$("$ESLINT_BIN" -c "$CONFIG_ESLINT" "$temp_file" 2>&1) || true
+        local exit_code=$?
+
+        rm -f "$temp_file"
+
+        if [[ $exit_code -eq 0 ]]; then
             return 0
         else
-            local exit_code=$?
-            # Adjust line numbers in error output
-            # Note: This is simplified - full line number adjustment would be more complex
-            rm -f "$temp_file"
+            if [[ $VERBOSE -eq 1 ]]; then
+                echo "$output"
+            else
+                echo "$output"
+            fi
             has_errors=1
             error_list+=("JS: $file")
             return $exit_code
         fi
     else
         # No PHP header - lint directly
-        print_info "  → $file"
+        if [[ $VERBOSE -eq 1 ]]; then
+            print_info "  → $file"
+        fi
 
-        if "$ESLINT_BIN" -c "$CONFIG_ESLINT" "$full_path" 2>&1; then
+        local output
+        output=$("$ESLINT_BIN" -c "$CONFIG_ESLINT" "$full_path" 2>&1) || true
+        local exit_code=$?
+
+        if [[ $exit_code -eq 0 ]]; then
             return 0
         else
+            if [[ $VERBOSE -eq 1 ]]; then
+                echo "$output"
+            else
+                echo "$output"
+            fi
             has_errors=1
             error_list+=("JS: $file")
-            return 1
+            return $exit_code
         fi
     fi
 }
