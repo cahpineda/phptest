@@ -1,25 +1,47 @@
 #!/bin/bash
 
 # ╔════════════════════════════════════════╗
-# ║   Sistema de Linting Inteligente      ║
-# ║   Validación de archivos modificados   ║
+# ║   Smart Linting System                ║
+# ║   Validates only modified files       ║
 # ╚════════════════════════════════════════╝
 #
-# Este script detecta archivos modificados o en stage y ejecuta
-# los linters apropiados solo en esos archivos.
+# This script detects modified or staged files and runs
+# the appropriate linters only on those files.
 #
-# Uso:
-#   ./lint.sh           # Modo resumen (por defecto)
-#   ./lint.sh --verbose # Modo detallado (muestra todo)
-#   ./lint.sh -v        # Alias de --verbose
+# Usage:
+#   ./lint.sh           # Summary mode (default)
+#   ./lint.sh --verbose # Detailed mode (shows everything)
+#   ./lint.sh -v        # Alias for --verbose
+#   ./lint.sh --fix     # Auto-fix errors when possible
 
 set -e  # Exit on error (except where we handle it)
 
 # Parse arguments
 VERBOSE=0
-if [[ "$1" == "--verbose" ]] || [[ "$1" == "-v" ]]; then
-    VERBOSE=1
-fi
+FIX_MODE=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --verbose|-v)
+            VERBOSE=1
+            ;;
+        --fix|-f)
+            FIX_MODE=1
+            ;;
+        --help|-h)
+            echo "Usage: $0 [options]"
+            echo ""
+            echo "Options:"
+            echo "  -v, --verbose    Show all details"
+            echo "  -f, --fix        Auto-fix errors when possible"
+            echo "  -h, --help       Show this help"
+            echo ""
+            echo "Environment variables:"
+            echo "  SKIP_STYLE=1     Skip style validation"
+            exit 0
+            ;;
+    esac
+done
 
 # Colors
 RED='\033[0;31m'
@@ -35,11 +57,11 @@ ESLINT_BIN="$PROJECT_ROOT/node_modules/.bin/eslint"
 CONFIG_PHPCS="$PROJECT_ROOT/config/phpcs.xml"
 CONFIG_ESLINT="$PROJECT_ROOT/config/.eslintrc.json"
 
-# Arrays para archivos
+# File arrays
 declare -a php_files
 declare -a js_files
 
-# Variables de control
+# Control variables
 has_errors=0
 declare -a error_list
 
@@ -50,8 +72,8 @@ declare -a error_list
 print_header() {
     echo ""
     echo "╔════════════════════════════════════════╗"
-    echo "║   Sistema de Linting Inteligente      ║"
-    echo "║   Validación de archivos modificados   ║"
+    echo "║   Smart Linting System                ║"
+    echo "║   Validates only modified files       ║"
     echo "╚════════════════════════════════════════╝"
     echo ""
 }
@@ -84,15 +106,15 @@ print_warning() {
 # ═══════════════════════════════════════════════════════════════
 
 get_modified_files() {
-    # Archivos modificados no staged
+    # Unstaged modified files
     local unstaged
     unstaged=$(git diff --name-only --diff-filter=ACMR 2>/dev/null || true)
 
-    # Archivos en stage
+    # Staged files
     local staged
     staged=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
 
-    # Combinar y eliminar duplicados
+    # Combine and remove duplicates
     local combined="${unstaged}${staged:+$'\n'}${staged}"
     echo "$combined" | sort -u | grep -v '^[[:space:]]*$' || true
 }
@@ -121,11 +143,11 @@ classify_files() {
 # ═══════════════════════════════════════════════════════════════
 
 lint_php_files() {
-    print_section "Validando archivos PHP"
+    print_section "Validating files PHP"
 
-    # PASO 1: Validar sintaxis PHP primero
+    # STEP 1: Validate PHP syntax first
     echo ""
-    print_info "🔍 Paso 1/3: Validando sintaxis PHP..."
+    print_info "🔍 Step 1/3: Validating PHP syntax..."
 
     local syntax_errors=0
     for file in "${php_files[@]}"; do
@@ -151,20 +173,20 @@ lint_php_files() {
 
     if [[ $syntax_errors -eq 1 ]]; then
         error_list+=("PHP: Syntax errors")
-        print_error "⚠️  Corrige los errores de sintaxis antes de validar estilo"
+        print_error "⚠️  Fix syntax errors before continuing"
         return 1
     fi
 
-    print_success "  ✓ Sintaxis correcta"
+    print_success "  ✓ Correct syntax"
     echo ""
 
-    # PASO 2: Validar con PHPStan (errores lógicos)
-    print_info "🔍 Paso 2/3: Analizando código (funciones, métodos, tipos)..."
+    # STEP 2: Validate with PHPStan (logical errors)
+    print_info "🔍 Step 2/3: Analyzing code (functions, methods, types)..."
     echo ""
 
     local phpstan_bin="$PROJECT_ROOT/vendor/bin/phpstan"
     if [[ ! -f "$phpstan_bin" ]]; then
-        print_warning "  ⚠️  PHPStan no instalado (opcional pero recomendado)"
+        print_warning "  ⚠️  PHPStan not installed (optional but recommended)"
         echo ""
     else
         # Build file list
@@ -181,12 +203,12 @@ lint_php_files() {
         set -e
 
         if [[ $phpstan_code -eq 0 ]]; then
-            print_success "  ✓ Análisis estático correcto"
+            print_success "  ✓ Static analysis passed"
         else
             has_errors=1
             error_list+=("PHP: Static analysis errors")
 
-            print_error "  ✗ Errores detectados por PHPStan"
+            print_error "  ✗ Errors detected by PHPStan"
             echo ""
 
             # Mostrar errores de PHPStan
@@ -194,21 +216,23 @@ lint_php_files() {
 
             local error_count=$(echo "$phpstan_output" | grep -c "^\s*-->" || echo 0)
             if [[ $error_count -gt 10 ]]; then
-                echo "     ... y $((error_count - 10)) errores más"
+                echo "     ... y $((error_count - 10)) more errors"
             fi
             echo ""
         fi
     fi
     echo ""
 
-    # PASO 3: Validar estilo con PHPCS (OPCIONAL)
+    # STEP 3: Validate style with PHPCS (OPTIONAL)
     if [[ "${SKIP_STYLE:-0}" == "0" ]]; then
-        print_info "🔍 Paso 3/3: Validando estilo de código (PSR-12)..."
+        print_info "🔍 Step 3/3: Validating code style (PSR-12)..."
         echo ""
 
-        # Check if PHPCS is installed
+        local phpcbf_bin="$PROJECT_ROOT/vendor/bin/phpcbf"
+
+        # Check if PHPCS/PHPCBF is installed
         if [[ ! -f "$PHPCS_BIN" ]]; then
-            print_warning "  ⚠️  PHPCS no instalado (opcional)"
+            print_warning "  ⚠️  PHPCS not installed (optional)"
             echo ""
         else
             # Build file list
@@ -217,36 +241,54 @@ lint_php_files() {
                 file_args+=("$PROJECT_ROOT/$file")
             done
 
-            # Run PHPCS and capture output
-            local output
-            local exit_code
-            set +e
-            output=$("$PHPCS_BIN" --standard="$CONFIG_PHPCS" "${file_args[@]}" 2>&1)
-            exit_code=$?
-            set -e
+            if [[ $FIX_MODE -eq 1 ]] && [[ -f "$phpcbf_bin" ]]; then
+                # Fix mode: use phpcbf to auto-fix
+                print_info "  🔧 Auto-fixing style..."
+                local output
+                set +e
+                output=$("$phpcbf_bin" --standard="$CONFIG_PHPCS" "${file_args[@]}" 2>&1)
+                local exit_code=$?
+                set -e
 
-            if [[ $exit_code -eq 0 ]]; then
-                print_success "  ✓ Estilo de código correcto"
-            else
-                # Para estilo, solo mostramos warning, no error crítico
-                print_warning "  ⚠️  Problemas de estilo detectados (no críticos)"
-
-                if [[ $VERBOSE -eq 1 ]]; then
-                    echo "$output"
+                if [[ $exit_code -eq 0 ]] || [[ $exit_code -eq 1 ]]; then
+                    # Exit code 1 significa que se hicieron cambios
+                    print_success "  ✓ Style fixed automatically"
+                    echo "$output" | grep "PHPCBF" | sed 's/^/     /'
                 else
-                    show_php_summary "$output"
+                    print_warning "  ⚠️  Some issues could not be auto-fixed"
+                fi
+            else
+                # Normal mode: just validate with phpcs
+                local output
+                local exit_code
+                set +e
+                output=$("$PHPCS_BIN" --standard="$CONFIG_PHPCS" "${file_args[@]}" 2>&1)
+                exit_code=$?
+                set -e
+
+                if [[ $exit_code -eq 0 ]]; then
+                    print_success "  ✓ Code style is correct"
+                else
+                    # Para estilo, solo mostramos warning, no error crítico
+                    print_warning "  ⚠️  Style issues detected (non-critical)"
+
+                    if [[ $VERBOSE -eq 1 ]]; then
+                        echo "$output"
+                    else
+                        show_php_summary "$output"
+                    fi
                 fi
             fi
         fi
     else
-        print_info "⏭️  Paso 3/3: Validación de estilo deshabilitada (SKIP_STYLE=1)"
+        print_info "⏭️  Step 3/3: Style validation disabled (SKIP_STYLE=1)"
     fi
     echo ""
 
     if [[ $has_errors -eq 1 ]]; then
         return 1
     else
-        print_success "✓ Todos los archivos PHP pasaron las validaciones críticas"
+        print_success "✓ All PHP files passed critical validations"
         return 0
     fi
 }
@@ -255,7 +297,7 @@ show_php_summary() {
     local output="$1"
 
     echo ""
-    print_warning "⚠️  Resumen de errores PHP:"
+    print_warning "⚠️  PHP errors summary:"
     echo ""
 
     # Extraer información de cada archivo
@@ -266,16 +308,16 @@ show_php_summary() {
         elif [[ "$line" =~ FOUND[[:space:]]+([0-9]+)[[:space:]]+ERROR.*AFFECTING[[:space:]]+([0-9]+)[[:space:]]+LINE ]]; then
             local errors="${BASH_REMATCH[1]}"
             local lines="${BASH_REMATCH[2]}"
-            echo "     ├─ $errors errores en $lines líneas"
+            echo "     ├─ $errors errors in $lines lines"
         elif [[ "$line" =~ PHPCBF[[:space:]]+CAN[[:space:]]+FIX.*([0-9]+)[[:space:]]+MARKED ]]; then
             local fixable="${BASH_REMATCH[1]}"
-            print_info "     └─ ✨ $fixable errores se pueden auto-arreglar"
+            print_info "     └─ ✨ $fixable errors can be auto-fixed"
         fi
     done <<< "$output"
 
     echo ""
-    print_info "💡 Para ver detalles completos: ./lint.sh --verbose"
-    print_info "💡 Para auto-arreglar: vendor/bin/phpcbf --standard=config/phpcs.xml <archivo>"
+    print_info "💡 To see full details: ./lint.sh --verbose"
+    print_info "💡 To auto-fix: vendor/bin/phpcbf --standard=config/phpcs.xml <archivo>"
     echo ""
 }
 
@@ -284,11 +326,11 @@ show_php_summary() {
 # ═══════════════════════════════════════════════════════════════
 
 lint_js_files() {
-    print_section "Validando archivos JavaScript"
+    print_section "Validating JavaScript files"
 
     # Check if ESLint is installed
     if [[ ! -f "$ESLINT_BIN" ]]; then
-        print_error "✗ ESLint no está instalado. Ejecuta: npm install"
+        print_error "✗ ESLint not installed. Run: npm install"
         has_errors=1
         error_list+=("JS: ESLint not installed")
         return 1
@@ -332,7 +374,7 @@ lint_js_files() {
 
 show_js_summary() {
     echo ""
-    print_warning "⚠️  Resumen de errores JavaScript:"
+    print_warning "⚠️  JavaScript errors summary:"
     echo ""
 
     if [[ $# -eq 0 ]]; then
@@ -359,7 +401,7 @@ show_js_summary() {
         echo ""
     done
 
-    print_info "💡 Para ver detalles completos: ./lint.sh --verbose"
+    print_info "💡 To see full details: ./lint.sh --verbose"
     echo ""
 }
 
@@ -386,7 +428,7 @@ lint_single_js_file() {
         file_to_lint="$temp_file"
 
         if [[ $VERBOSE -eq 1 ]]; then
-            print_info "  → $file (contiene <?php header, líneas PHP: $php_header_lines)"
+            print_info "  → $file (contiene <?php header, lines PHP: $php_header_lines)"
         fi
     else
         if [[ $VERBOSE -eq 1 ]]; then
@@ -397,8 +439,23 @@ lint_single_js_file() {
     # Run ESLint and capture both output and exit code
     local output
     local exit_code
+    local eslint_flags="-c $CONFIG_ESLINT"
 
-    output=$("$ESLINT_BIN" -c "$CONFIG_ESLINT" "$file_to_lint" 2>&1) && exit_code=0 || exit_code=$?
+    # Agregar --fix si está en modo fix
+    if [[ $FIX_MODE -eq 1 ]]; then
+        eslint_flags="$eslint_flags --fix"
+    fi
+
+    output=$("$ESLINT_BIN" $eslint_flags "$file_to_lint" 2>&1) && exit_code=0 || exit_code=$?
+
+    # Si estamos en modo fix y el archivo temporal fue modificado, copiar cambios de vuelta
+    if [[ $FIX_MODE -eq 1 ]] && [[ -n "$temp_file" ]] && [[ $exit_code -eq 0 ]]; then
+        # Copiar archivo arreglado de vuelta (preservando header PHP)
+        local first_lines
+        first_lines=$(head -n "$php_header_lines" "$full_path")
+        echo "$first_lines" > "$full_path"
+        cat "$temp_file" >> "$full_path"
+    fi
 
     # Clean up temp file if created
     [[ -n "$temp_file" ]] && rm -f "$temp_file"
@@ -423,7 +480,7 @@ lint_single_js_file() {
 show_files_to_lint() {
     if [[ ${#php_files[@]} -gt 0 ]]; then
         echo ""
-        echo "📝 Archivos PHP a validar (${#php_files[@]}):"
+        echo "📝 PHP files to validate (${#php_files[@]}):"
         for file in "${php_files[@]}"; do
             echo "  - $file"
         done
@@ -431,7 +488,7 @@ show_files_to_lint() {
 
     if [[ ${#js_files[@]} -gt 0 ]]; then
         echo ""
-        echo "📝 Archivos JS a validar (${#js_files[@]}):"
+        echo "📝 JS files to validate (${#js_files[@]}):"
         for file in "${js_files[@]}"; do
             echo "  - $file"
         done
@@ -445,18 +502,18 @@ print_summary() {
     echo "══════════════════════════════════════════════════"
 
     if [[ $has_errors -eq 0 ]]; then
-        print_success "✓ LINTING EXITOSO"
+        print_success "✓ LINTING PASSED"
         echo ""
         echo "Todos los archivos modificados pasaron las validaciones."
     else
-        print_error "✗ LINTING FALLÓ"
+        print_error "✗ LINTING FAILED"
         echo ""
-        echo "Archivos con errores:"
+        echo "Files with errors:"
         for error in "${error_list[@]}"; do
             echo "  ✗ $error"
         done
         echo ""
-        echo "Por favor corrige los errores antes de hacer commit."
+        echo "Please fix errors before committing."
     fi
 
     echo "══════════════════════════════════════════════════"
@@ -476,7 +533,7 @@ main() {
 
     # Check if we have any files
     if [[ -z "$modified_files" ]] || [[ "$modified_files" =~ ^[[:space:]]*$ ]]; then
-        print_info "✓ No hay archivos modificados para validar"
+        print_info "✓ No modified files to validate"
         return 0
     fi
 
@@ -484,14 +541,14 @@ main() {
     local file_count
     file_count=$(echo "$modified_files" | wc -l | tr -d ' ')
 
-    print_info "Archivos detectados: $file_count"
+    print_info "Files detected: $file_count"
 
     # Classify files
     classify_files "$modified_files"
 
     # Check if we have files to lint
     if [[ ${#php_files[@]} -eq 0 ]] && [[ ${#js_files[@]} -eq 0 ]]; then
-        print_info "✓ No hay archivos PHP o JS modificados para validar"
+        print_info "✓ No modified PHP or JS files to validate"
         return 0
     fi
 
