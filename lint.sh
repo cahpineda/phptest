@@ -355,7 +355,7 @@ lint_js_files() {
     done
 
     if [[ $js_has_errors -eq 0 ]]; then
-        print_success "✓ Todos los archivos JS pasaron las validaciones"
+        print_success "✓ All JS files passed validations"
         return 0
     else
         # Mostrar errores (tanto en verbose como en resumen)
@@ -504,7 +504,7 @@ print_summary() {
     if [[ $has_errors -eq 0 ]]; then
         print_success "✓ LINTING PASSED"
         echo ""
-        echo "Todos los archivos modificados pasaron las validaciones."
+        echo "All modified files passed validations."
     else
         print_error "✗ LINTING FAILED"
         echo ""

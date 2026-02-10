@@ -21,6 +21,10 @@ window.globalInit = function() {
     });
 };
 
+window.is_array = function(x) {
+    return Array.isArray(x);
+};
+
 function initializeComponents() {
     var content = document.getElementById('content');
     if (content) {
@@ -28,6 +32,14 @@ function initializeComponents() {
     }
 }
 
+function bad() {
+    var x = 5;
+    if(window.is_array(x)) {
+        return x;
+    } else {
+        return false;
+    }
+}
 // Función global para manejo de errores (patrón legacy)
 window.handleError = function(error) {
     console.error('Error:', error);
