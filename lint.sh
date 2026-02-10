@@ -84,7 +84,8 @@ get_modified_files() {
     staged=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
 
     # Combinar y eliminar duplicados
-    echo -e "${unstaged}\n${staged}" | sort -u | grep -v '^$' || true
+    local combined="${unstaged}${staged:+$'\n'}${staged}"
+    echo "$combined" | sort -u | grep -v '^[[:space:]]*$' || true
 }
 
 classify_files() {
@@ -274,14 +275,15 @@ main() {
     local modified_files
     modified_files=$(get_modified_files)
 
-    # Count files
-    local file_count
-    file_count=$(echo "$modified_files" | grep -c . || echo 0)
-
-    if [[ $file_count -eq 0 ]]; then
+    # Check if we have any files
+    if [[ -z "$modified_files" ]] || [[ "$modified_files" =~ ^[[:space:]]*$ ]]; then
         print_info "✓ No hay archivos modificados para validar"
         return 0
     fi
+
+    # Count files
+    local file_count
+    file_count=$(echo "$modified_files" | wc -l | tr -d ' ')
 
     print_info "Archivos detectados: $file_count"
 
