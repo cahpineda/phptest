@@ -17,7 +17,12 @@
       "Bash(composer require:*)",
       "Bash(curl:*)",
       "Bash(vendor/bin/phpstan analyse:*)",
-      "Bash(SKIP_STYLE=1 ./lint.sh:*)"
+      "Bash(SKIP_STYLE=1 ./lint.sh:*)",
+      "Bash(echo:*)",
+      "Bash(node:*)",
+      "Bash(bash:*)",
+      "Bash(/tmp/test_lint.sh << 'EOF'\n#!/bin/bash\nPROJECT_ROOT=\"/Users/carloshurtado/php/phptest\"\nESLINT_BIN=\"$PROJECT_ROOT/node_modules/.bin/eslint\"\nCONFIG_ESLINT=\"$PROJECT_ROOT/config/.eslintrc.json\"\n\nfile=\"public/js/app.js\"\nfull_path=\"$PROJECT_ROOT/$file\"\nfirst_line=$\\(head -n 1 \"$full_path\"\\)\n\nif [[ \"$first_line\" =~ ^\\\\<\\\\?php ]]; then\n    php_header_lines=$\\(grep -n '?>' \"$full_path\" | head -1 | cut -d: -f1\\)\n    temp_file=$\\(mktemp\\)\n    tail -n +$\\(\\(php_header_lines + 1\\)\\) \"$full_path\" > \"$temp_file\"\n    \n    echo \"Running ESLint on temp file: $temp_file\"\n    \"$ESLINT_BIN\" -c \"$CONFIG_ESLINT\" \"$temp_file\"\n    exit_code=$?\n    echo \"ESLint exit code: $exit_code\"\n    \n    rm -f \"$temp_file\"\nfi\nEOF)",
+      "Bash(public/js/app.js << 'EOF'\n\n// Error intencional: función sin cerrar\nfunction testError\\(\\) {\n    var x = 5;\n    return x\nEOF)"
     ]
   }
 }

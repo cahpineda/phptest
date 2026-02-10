@@ -299,12 +299,16 @@ lint_js_files() {
 
     for file in "${js_files[@]}"; do
         local file_output
-        file_output=$(lint_single_js_file "$file" 2>&1) || true
-        local file_exit_code=$?
+        local file_exit_code
+
+        set +e
+        file_output=$(lint_single_js_file "$file" 2>&1)
+        file_exit_code=$?
+        set -e
 
         if [[ $file_exit_code -ne 0 ]]; then
             js_has_errors=1
-            js_errors_summary+=("$file|$file_output")
+            js_errors_summary+=("$file|||$file_output")
         fi
     done
 
@@ -312,7 +316,14 @@ lint_js_files() {
         print_success "✓ Todos los archivos JS pasaron las validaciones"
         return 0
     else
-        if [[ $VERBOSE -eq 0 ]]; then
+        # Mostrar errores (tanto en verbose como en resumen)
+        if [[ $VERBOSE -eq 1 ]]; then
+            # En modo verbose, los errores ya se mostraron durante lint_single_js_file
+            # Solo necesitamos mostrar el resumen
+            echo ""
+            print_error "✗ Errores encontrados en archivos JavaScript"
+        else
+            # En modo resumen, mostrar el resumen conciso
             show_js_summary "${js_errors_summary[@]}"
         fi
         return 1
@@ -324,38 +335,27 @@ show_js_summary() {
     print_warning "⚠️  Resumen de errores JavaScript:"
     echo ""
 
+    if [[ $# -eq 0 ]]; then
+        echo "  (no errors captured - bug in script)"
+        return
+    fi
+
     for entry in "$@"; do
-        IFS='|' read -r file output <<< "$entry"
+        # Split por delimitador |||
+        local file="${entry%%|||*}"
+        local output="${entry#*|||}"
 
         echo "  📄 $file"
+        echo "     │"
 
-        # Contar errores y warnings
-        local error_count=$(echo "$output" | grep -c "error" || echo 0)
-        local warning_count=$(echo "$output" | grep -c "warning" || echo 0)
-
-        if [[ $error_count -gt 0 ]]; then
-            echo "     ├─ $error_count errores"
-        fi
-        if [[ $warning_count -gt 0 ]]; then
-            echo "     ├─ $warning_count warnings"
-        fi
-
-        # Mostrar primeras 3 líneas de error
-        local line_num=0
-        while IFS= read -r line; do
-            if [[ "$line" =~ [0-9]+:[0-9]+.*error ]]; then
-                if [[ $line_num -lt 3 ]]; then
-                    echo "     │  $line"
-                    ((line_num++))
-                fi
-            fi
-        done <<< "$output"
-
-        if [[ $error_count -gt 3 ]]; then
-            echo "     └─ ... y $((error_count - 3)) errores más"
+        # Mostrar el output tal cual
+        if [[ -n "$output" ]]; then
+            echo "$output" | sed 's/^/     │  /'
         else
-            echo "     └─"
+            echo "     │  (sin output capturado)"
         fi
+
+        echo "     └─"
         echo ""
     done
 
@@ -368,6 +368,7 @@ lint_single_js_file() {
     local full_path="$PROJECT_ROOT/$file"
     local temp_file=""
     local php_header_lines=0
+    local file_to_lint="$full_path"
 
     # Check if file has PHP header
     local first_line
@@ -382,52 +383,36 @@ lint_single_js_file() {
         # Create temp file without PHP header
         temp_file=$(mktemp)
         tail -n +$((php_header_lines + 1)) "$full_path" > "$temp_file"
+        file_to_lint="$temp_file"
 
         if [[ $VERBOSE -eq 1 ]]; then
             print_info "  → $file (contiene <?php header, líneas PHP: $php_header_lines)"
         fi
-
-        # Run ESLint on temp file
-        local output
-        output=$("$ESLINT_BIN" -c "$CONFIG_ESLINT" "$temp_file" 2>&1) || true
-        local exit_code=$?
-
-        rm -f "$temp_file"
-
-        if [[ $exit_code -eq 0 ]]; then
-            return 0
-        else
-            if [[ $VERBOSE -eq 1 ]]; then
-                echo "$output"
-            else
-                echo "$output"
-            fi
-            has_errors=1
-            error_list+=("JS: $file")
-            return $exit_code
-        fi
     else
-        # No PHP header - lint directly
         if [[ $VERBOSE -eq 1 ]]; then
             print_info "  → $file"
         fi
+    fi
 
-        local output
-        output=$("$ESLINT_BIN" -c "$CONFIG_ESLINT" "$full_path" 2>&1) || true
-        local exit_code=$?
+    # Run ESLint and capture both output and exit code
+    local output
+    local exit_code
 
-        if [[ $exit_code -eq 0 ]]; then
-            return 0
-        else
-            if [[ $VERBOSE -eq 1 ]]; then
-                echo "$output"
-            else
-                echo "$output"
-            fi
-            has_errors=1
-            error_list+=("JS: $file")
-            return $exit_code
-        fi
+    output=$("$ESLINT_BIN" -c "$CONFIG_ESLINT" "$file_to_lint" 2>&1) && exit_code=0 || exit_code=$?
+
+    # Clean up temp file if created
+    [[ -n "$temp_file" ]] && rm -f "$temp_file"
+
+    # Process output
+    if [[ $exit_code -eq 0 ]]; then
+        return 0
+    else
+        has_errors=1
+        error_list+=("JS: $file")
+
+        # Always print output (it will be captured by parent for summary)
+        echo "$output"
+        return 1
     fi
 }
 
@@ -515,12 +500,12 @@ main() {
 
     # Lint PHP files
     if [[ ${#php_files[@]} -gt 0 ]]; then
-        lint_php_files || true  # Don't exit, continue with JS
+        lint_php_files || has_errors=1
     fi
 
     # Lint JS files
     if [[ ${#js_files[@]} -gt 0 ]]; then
-        lint_js_files || true  # Don't exit
+        lint_js_files || has_errors=1
     fi
 
     # Print summary
