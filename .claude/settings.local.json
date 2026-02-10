@@ -5,7 +5,8 @@
       "Bash(composer install:*)",
       "Bash(php:*)",
       "Bash(git add:*)",
-      "Bash(node_modules/.bin/eslint:*)"
+      "Bash(node_modules/.bin/eslint:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
