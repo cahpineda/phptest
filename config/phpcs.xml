@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<ruleset name="Project Coding Standard">
+    <description>PSR-12 Standard for PHP files</description>
+
+    <!-- Use PSR-12 as base -->
+    <rule ref="PSR12"/>
+
+    <!-- Paths to check -->
+    <file>src</file>
+    <file>public</file>
+
+    <!-- Show progress -->
+    <arg value="p"/>
+
+    <!-- Use colors in output -->
+    <arg name="colors"/>
+
+    <!-- Show sniff codes in all reports -->
+    <arg value="s"/>
+</ruleset>

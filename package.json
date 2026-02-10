@@ -1,0 +1,16 @@
+{
+  "name": "phptest-linter",
+  "version": "1.0.0",
+  "description": "Sistema de linting inteligente para monolito PHP/JS",
+  "scripts": {
+    "lint": "php scripts/lint.php",
+    "lint:js": "eslint -c config/.eslintrc.json",
+    "lint:php": "vendor/bin/phpcs --standard=config/phpcs.xml"
+  },
+  "devDependencies": {
+    "eslint": "^8.56.0"
+  },
+  "keywords": ["linter", "php", "javascript", "monolith"],
+  "author": "",
+  "license": "MIT"
+}

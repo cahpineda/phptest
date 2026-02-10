@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod:*)",
+      "Bash(composer install:*)",
+      "Bash(php:*)",
+      "Bash(git add:*)",
+      "Bash(node_modules/.bin/eslint:*)"
+    ]
+  }
+}

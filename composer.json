@@ -1,0 +1,14 @@
+{
+    "name": "phptest/linter-poc",
+    "description": "POC de linting inteligente para monolito PHP/JS",
+    "type": "project",
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "squizlabs/php_codesniffer": "^3.7"
+    },
+    "config": {
+        "bin-dir": "vendor/bin"
+    }
+}
