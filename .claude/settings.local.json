@@ -6,7 +6,8 @@
       "Bash(php:*)",
       "Bash(git add:*)",
       "Bash(node_modules/.bin/eslint:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(./lint.sh:*)"
     ]
   }
 }

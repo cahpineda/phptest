@@ -84,14 +84,14 @@ php scripts/install.php
 ### Ejecutar linting de archivos modificados
 
 ```bash
-# Método 1: Directamente con PHP
-php scripts/lint.php
+# ⭐ Método recomendado: Script shell
+./lint.sh
 
-# Método 2: Via npm script
+# Método 2: Directamente con PHP
+./lint.sh
+
+# Método 3: Via npm script
 npm run lint
-
-# Método 3: Si lo hiciste ejecutable
-./scripts/lint.php
 ```
 
 ### ¿Qué archivos se validan?
@@ -108,7 +108,7 @@ Solo se validan archivos `.php` y `.js` que hayan sido agregados, modificados o 
 ### Probar el sistema sin cambios
 
 ```bash
-php scripts/lint.php
+./lint.sh
 ```
 
 **Resultado esperado**: "No hay archivos modificados para validar"
@@ -120,7 +120,7 @@ php scripts/lint.php
 echo "<?php echo 'test';" >> src/Models/User.php
 
 # Ejecutar linter
-php scripts/lint.php
+./lint.sh
 ```
 
 **Resultado esperado**: PHPCS ejecuta solo en `User.php`
@@ -132,7 +132,7 @@ php scripts/lint.php
 echo "console.log('test')" >> public/js/modern.js
 
 # Ejecutar linter
-php scripts/lint.php
+./lint.sh
 ```
 
 **Resultado esperado**: ESLint ejecuta solo en `modern.js`
@@ -144,7 +144,7 @@ php scripts/lint.php
 git add public/js/app.js
 
 # Ejecutar linter
-php scripts/lint.php
+./lint.sh
 ```
 
 **Resultado esperado**: El linter detecta el header `<?php`, lo elimina temporalmente, valida el JS puro y ajusta los números de línea en los errores.
@@ -272,7 +272,7 @@ Para ejecutar automáticamente antes de cada commit:
 # Crear pre-commit hook
 cat > .git/hooks/pre-commit << 'EOF'
 #!/bin/bash
-php scripts/lint.php
+./lint.sh
 if [ $? -ne 0 ]; then
     echo "Linting falló. Corrige los errores antes de hacer commit."
     exit 1
