@@ -123,43 +123,131 @@ classify_files() {
 lint_php_files() {
     print_section "Validando archivos PHP"
 
-    # Check if PHPCS is installed
-    if [[ ! -f "$PHPCS_BIN" ]]; then
-        print_error "✗ PHPCS no está instalado. Ejecuta: composer install"
-        has_errors=1
-        error_list+=("PHP: PHPCS not installed")
+    # PASO 1: Validar sintaxis PHP primero
+    echo ""
+    print_info "🔍 Paso 1/3: Validando sintaxis PHP..."
+
+    local syntax_errors=0
+    for file in "${php_files[@]}"; do
+        local full_path="$PROJECT_ROOT/$file"
+        local syntax_output
+
+        set +e
+        syntax_output=$(php -l "$full_path" 2>&1)
+        local syntax_code=$?
+        set -e
+
+        if [[ $syntax_code -ne 0 ]]; then
+            syntax_errors=1
+            has_errors=1
+
+            print_error "  ✗ $file"
+            echo ""
+            # Extraer solo la línea del error
+            echo "$syntax_output" | grep -E "(Parse error|Fatal error|syntax error)" | sed 's/^/     /'
+            echo ""
+        fi
+    done
+
+    if [[ $syntax_errors -eq 1 ]]; then
+        error_list+=("PHP: Syntax errors")
+        print_error "⚠️  Corrige los errores de sintaxis antes de validar estilo"
         return 1
     fi
 
-    # Build file list
-    local file_args=()
-    for file in "${php_files[@]}"; do
-        file_args+=("$PROJECT_ROOT/$file")
-    done
+    print_success "  ✓ Sintaxis correcta"
+    echo ""
 
-    # Run PHPCS and capture output
-    local output
-    local exit_code
-    set +e  # Temporarily disable exit on error
-    output=$("$PHPCS_BIN" --standard="$CONFIG_PHPCS" "${file_args[@]}" 2>&1)
-    exit_code=$?
-    set -e  # Re-enable exit on error
+    # PASO 2: Validar con PHPStan (errores lógicos)
+    print_info "🔍 Paso 2/3: Analizando código (funciones, métodos, tipos)..."
+    echo ""
 
-    if [[ $exit_code -eq 0 ]]; then
-        print_success "✓ Todos los archivos PHP pasaron las validaciones"
-        return 0
+    local phpstan_bin="$PROJECT_ROOT/vendor/bin/phpstan"
+    if [[ ! -f "$phpstan_bin" ]]; then
+        print_warning "  ⚠️  PHPStan no instalado (opcional pero recomendado)"
+        echo ""
     else
-        has_errors=1
-        error_list+=("PHP")
+        # Build file list
+        local file_list=""
+        for file in "${php_files[@]}"; do
+            file_list="$file_list $PROJECT_ROOT/$file"
+        done
 
-        if [[ $VERBOSE -eq 1 ]]; then
-            # Modo verbose: mostrar todo
-            echo "$output"
+        # Run PHPStan
+        local phpstan_output
+        set +e
+        phpstan_output=$("$phpstan_bin" analyse $file_list --memory-limit=256M --no-progress --error-format=raw 2>&1)
+        local phpstan_code=$?
+        set -e
+
+        if [[ $phpstan_code -eq 0 ]]; then
+            print_success "  ✓ Análisis estático correcto"
         else
-            # Modo resumen: extraer y mostrar solo lo importante
-            show_php_summary "$output"
+            has_errors=1
+            error_list+=("PHP: Static analysis errors")
+
+            print_error "  ✗ Errores detectados por PHPStan"
+            echo ""
+
+            # Mostrar errores de PHPStan
+            echo "$phpstan_output" | grep -E "^\s*-->" | head -10 | sed 's/^/     /'
+
+            local error_count=$(echo "$phpstan_output" | grep -c "^\s*-->" || echo 0)
+            if [[ $error_count -gt 10 ]]; then
+                echo "     ... y $((error_count - 10)) errores más"
+            fi
+            echo ""
         fi
+    fi
+    echo ""
+
+    # PASO 3: Validar estilo con PHPCS (OPCIONAL)
+    if [[ "${SKIP_STYLE:-0}" == "0" ]]; then
+        print_info "🔍 Paso 3/3: Validando estilo de código (PSR-12)..."
+        echo ""
+
+        # Check if PHPCS is installed
+        if [[ ! -f "$PHPCS_BIN" ]]; then
+            print_warning "  ⚠️  PHPCS no instalado (opcional)"
+            echo ""
+        else
+            # Build file list
+            local file_args=()
+            for file in "${php_files[@]}"; do
+                file_args+=("$PROJECT_ROOT/$file")
+            done
+
+            # Run PHPCS and capture output
+            local output
+            local exit_code
+            set +e
+            output=$("$PHPCS_BIN" --standard="$CONFIG_PHPCS" "${file_args[@]}" 2>&1)
+            exit_code=$?
+            set -e
+
+            if [[ $exit_code -eq 0 ]]; then
+                print_success "  ✓ Estilo de código correcto"
+            else
+                # Para estilo, solo mostramos warning, no error crítico
+                print_warning "  ⚠️  Problemas de estilo detectados (no críticos)"
+
+                if [[ $VERBOSE -eq 1 ]]; then
+                    echo "$output"
+                else
+                    show_php_summary "$output"
+                fi
+            fi
+        fi
+    else
+        print_info "⏭️  Paso 3/3: Validación de estilo deshabilitada (SKIP_STYLE=1)"
+    fi
+    echo ""
+
+    if [[ $has_errors -eq 1 ]]; then
         return 1
+    else
+        print_success "✓ Todos los archivos PHP pasaron las validaciones críticas"
+        return 0
     fi
 }
 

@@ -1,311 +1,181 @@
 # Sistema de Linting Inteligente para Monolito PHP/JS
 
-Este proyecto es una POC (Proof of Concept) que demuestra cómo implementar un sistema de linting inteligente para un monolito legacy que contiene código PHP y JavaScript mezclado.
+POC de linting que valida **solo archivos modificados** enfocado en **prevenir código roto**, no en estilo.
 
-## 🎯 Características
+## 🎯 Filosofía
 
-- ✅ **Linting selectivo**: Solo valida archivos modificados o en stage, no todo el código legacy
-- ✅ **Detección automática**: Identifica qué archivos han cambiado usando git
-- ✅ **Multi-lenguaje**: Soporta PHP (PHPCS/PSR-12) y JavaScript (ESLint)
-- ✅ **Manejo de casos edge**: Procesa correctamente archivos JS con headers `<?php` (común en templates legacy)
-- ✅ **Funciones globales**: Valida código con `window.globalFunction`
-- ✅ **Reportes claros**: Muestra exactamente qué archivos tienen problemas
-- ✅ **Integrable**: Puede usarse en pre-commit hooks o CI/CD
-
-## 📁 Estructura del Proyecto
-
-```
-phptest/
-├── config/
-│   ├── .eslintrc.json      # Configuración ESLint
-│   └── phpcs.xml            # Configuración PHPCS (PSR-12)
-├── public/
-│   ├── css/
-│   │   └── styles.css
-│   ├── js/
-│   │   ├── app.js          # JS con <?php header + window.globalInit
-│   │   ├── legacy.js       # JS con <?php header + funciones legacy
-│   │   └── modern.js       # JS moderno + window.apiUtils
-│   └── index.php           # Entry point
- de linting
-├── src/
-│   ├── Controllers/
-│   │   ├── ProductController.php
-│   │   └── UserController.php
-│   ├── Models/
-│   │   └── User.php
-│   └── Utils/
-│       └── helpers.php
-├── composer.json           # Dependencias PHP
-├── package.json            # Dependencias JS
-└── README.md
-```
+En monolitos legacy:
+- ❌ No forzamos estilo en código existente
+- ✅ **Evitamos que se rompa el código**
+- ✅ Detectamos errores de sintaxis
+- ✅ Detectamos funciones/métodos inexistentes
 
 ## 🚀 Instalación
 
 ### Requisitos
-
 - PHP >= 7.4
 - Composer
 - Node.js / npm
 - Git
 
-### Instalación de dependencias
-
+### Instalar dependencias
 ```bash
-# Instalar dependencias PHP
 composer install
-
-# Instalar dependencias JavaScript
 npm install
 ```
 
 ## 📝 Uso
 
-### Ejecutar linting de archivos modificados
-
-```bash
-# ⭐ Método recomendado: Script shell
-./lint.sh
-
-# Método 2: Directamente con PHP
-./lint.sh
-
-# Método 3: Via npm script
-npm run lint
-```
-
-### ¿Qué archivos se validan?
-
-El script detecta automáticamente:
-
-1. **Archivos modificados** (working directory): `git diff --name-only`
-2. **Archivos en stage**: `git diff --cached --name-only`
-
-Solo se validan archivos `.php` y `.js` que hayan sido agregados, modificados o renombrados.
-
-## 🧪 Pruebas
-
-### Probar el sistema sin cambios
-
+### Linting normal (recomendado)
 ```bash
 ./lint.sh
 ```
 
-**Resultado esperado**: "No hay archivos modificados para validar"
+**Valida 3 cosas:**
+1. ✅ **Sintaxis** (crítico): `;`, `}`, `(`, typos
+2. ✅ **Análisis estático** (crítico): funciones, métodos, clases inexistentes
+3. ⚠️ **Estilo** (warning): PSR-12, no bloquea commit
 
-### Probar con un archivo PHP modificado
-
+### Solo validaciones críticas (sin estilo)
 ```bash
-# Modificar un archivo
-echo "<?php echo 'test';" >> src/Models/User.php
+SKIP_STYLE=1 ./lint.sh
+```
 
-# Ejecutar linter
+### Ver detalles completos
+```bash
+./lint.sh --verbose
+```
+
+## 🔍 ¿Qué detecta?
+
+### ✅ CRÍTICO (bloquea commit):
+
+| Error | Ejemplo | Detectado por |
+|-------|---------|---------------|
+| Sin `;` | `echo "test"` | php -l |
+| Sin `}` | `if (true) { echo "hi";` | php -l |
+| Typo en keyword | `<?ph` | php -l |
+| Función inexistente | `foo()` | PHPStan |
+| Clase inexistente | `new Bar()` | PHPStan |
+| Método inexistente | `$obj->missing()` | PHPStan |
+
+### ⚠️ WARNING (no bloquea):
+
+| Error | Ejemplo |
+|-------|---------|
+| Espacios | `if($x==1){` |
+| Sin namespace | `class Foo` |
+| Llaves mal ubicadas | `function x(){` |
+
+## 📁 Estructura
+
+```
+phptest/
+├── lint.sh              ← Script principal (bash)
+├── config/
+│   ├── phpcs.xml        ← Configuración estilo (opcional)
+│   └── .eslintrc.json   ← Configuración JS
+├── phpstan.neon         ← Configuración análisis estático
+├── src/                 ← Código PHP
+├── public/              ← Archivos web
+└── vendor/bin/
+    ├── phpcs            ← Validador de estilo
+    ├── phpcbf           ← Auto-fix estilo
+    └── phpstan          ← Análisis estático
+```
+
+## 🧪 Ejemplos
+
+### Sin errores
+```bash
 ./lint.sh
+# ✓ Sintaxis correcta
+# ✓ Análisis estático correcto
+# ⚠️ Problemas de estilo (no críticos)
+# ✓ LINTING EXITOSO
 ```
 
-**Resultado esperado**: PHPCS ejecuta solo en `User.php`
-
-### Probar con un archivo JS modificado
-
+### Con error de sintaxis
 ```bash
-# Modificar un archivo JS
-echo "console.log('test')" >> public/js/modern.js
-
-# Ejecutar linter
+# Archivo con: echo "test"  (falta ;)
 ./lint.sh
+# ✗ src/file.php
+#    PHP Parse error: expecting ";"
+# ✗ LINTING FALLÓ
 ```
 
-**Resultado esperado**: ESLint ejecuta solo en `modern.js`
-
-### Probar con archivo JS que tiene <?php header
-
+### Con función inexistente
 ```bash
-# Modificar archivo con header PHP
-git add public/js/app.js
-
-# Ejecutar linter
+# Archivo con: noExiste();
 ./lint.sh
+# ✗ Function noExiste() not found
+# ✗ LINTING FALLÓ
 ```
 
-**Resultado esperado**: El linter detecta el header `<?php`, lo elimina temporalmente, valida el JS puro y ajusta los números de línea en los errores.
+## ⚙️ Configuración
 
-### Restaurar archivos modificados
+### Deshabilitar validación de estilo permanentemente
+
+Edita `.bashrc` o `.zshrc`:
+```bash
+export SKIP_STYLE=1
+```
+
+### Cambiar nivel de PHPStan
+
+Edita `phpstan.neon`:
+```neon
+parameters:
+    level: 1  # 0-9, donde 9 es más estricto
+```
+
+### Excluir archivos de PHPStan
+
+Edita `phpstan.neon`:
+```neon
+parameters:
+    excludePaths:
+        - src/Legacy/*
+```
+
+## 🎓 Workflow
 
 ```bash
-git checkout -- src/Models/User.php public/js/modern.js
-```
+# 1. Hacer cambios
+vim src/Controllers/UserController.php
 
-## 🔧 Configuración
+# 2. Validar (solo crítico)
+SKIP_STYLE=1 ./lint.sh
 
-### PHP (PHPCS)
-
-Archivo: `config/phpcs.xml`
-
-- Estándar: PSR-12
-- Directorios: `src/`, `public/`
-
-Para cambiar el estándar, modifica la línea:
-```xml
-<rule ref="PSR12"/>
-```
-
-### JavaScript (ESLint)
-
-Archivo: `config/.eslintrc.json`
-
-- Entorno: browser, ES6
-- Reglas: semi, quotes, indent, etc.
-- Globals: `window` (readonly)
-
-## 📋 Ejemplos de Código
-
-### Archivos JS con <?php header
-
-El proyecto incluye archivos como `public/js/app.js`:
-
-```javascript
-<?php /* Template file */ ?>
-window.globalInit = function() {
-    console.log('App initialized');
-};
-```
-
-El linter maneja esto automáticamente:
-1. Detecta el header `<?php ... ?>`
-2. Crea un archivo temporal sin el header
-3. Ejecuta ESLint en el archivo limpio
-4. Ajusta los números de línea en los errores reportados
-
-### Funciones globales en window
-
-El proyecto usa funciones globales como en monolitos reales:
-
-```javascript
-// En app.js
-window.globalInit = function() { ... }
-window.handleError = function(error) { ... }
-
-// En legacy.js
-window.legacyAjax = function(url, callback) { ... }
-window.legacyUtils = { ... }
-
-// En modern.js
-window.apiUtils = { ... }
-window.appState = { ... }
-```
-
-## 🎨 Características del Linter
-
-### Detección Inteligente
-
-- Usa `git diff` para detectar cambios
-- Filtra solo archivos `.php` y `.js`
-- Ignora archivos borrados
-- No valida archivos que no fueron modificados
-
-### Manejo de Edge Cases
-
-- **JS con PHP**: Elimina temporalmente headers `<?php ... ?>`
-- **Números de línea**: Ajusta líneas si hay headers PHP
-- **Archivos grandes**: Solo valida lo modificado, no todo el archivo
-- **Funciones globales**: ESLint configurado para reconocer `window`
-
-### Reportes
-
-```
-╔════════════════════════════════════════╗
-║   Sistema de Linting Inteligente      ║
-║   Validación de archivos modificados   ║
-╚════════════════════════════════════════╝
-
-Archivos detectados: 2
-
-📝 Archivos PHP a validar (1):
-  - src/Controllers/UserController.php
-
-📝 Archivos JS a validar (1):
-  - public/js/app.js
-
-──────────────────────────────────────────────────
-  Validando archivos PHP
-──────────────────────────────────────────────────
-✓ Todos los archivos PHP pasaron las validaciones
-
-──────────────────────────────────────────────────
-  Validando archivos JavaScript
-──────────────────────────────────────────────────
-  → public/js/app.js (contiene <?php header, líneas PHP: 1)
-✓ Todos los archivos JS pasaron las validaciones
-
-══════════════════════════════════════════════════
-✓ LINTING EXITOSO
-
-Todos los archivos modificados pasaron las validaciones.
-══════════════════════════════════════════════════
-```
-
-## 🔗 Integración con Git Hooks
-
-Para ejecutar automáticamente antes de cada commit:
-
-```bash
-# Crear pre-commit hook
-cat > .git/hooks/pre-commit << 'EOF'
-#!/bin/bash
+# 3. Si hay errores, corregir
+# 4. Validar de nuevo
 ./lint.sh
-if [ $? -ne 0 ]; then
-    echo "Linting falló. Corrige los errores antes de hacer commit."
-    exit 1
-fi
-EOF
 
-# Hacer ejecutable
-chmod +x .git/hooks/pre-commit
+# 5. Commit (sin hacer git add ni commit automático)
 ```
 
-## 🐛 Problemas Comunes
+## 🔧 Herramientas
 
-### "PHPCS no está instalado"
+| Herramienta | Propósito | Nivel |
+|-------------|-----------|-------|
+| `php -l` | Sintaxis | Crítico ✅ |
+| PHPStan | Funciones/tipos | Crítico ✅ |
+| PHPCS | Estilo PSR-12 | Warning ⚠️ |
+| ESLint | JS | Crítico ✅ |
 
-```bash
-composer install
-# O descarga manual (ver Opción 2 en Instalación)
-```
+## 📊 Comparación
 
-### "ESLint no está instalado"
-
-```bash
-npm install
-```
-
-### "command not found: composer"
-
-Usa la Opción 2 o 3 de instalación (descarga manual o script automatizado)
-
-## 🎓 Por qué este enfoque
-
-En un monolito legacy grande:
-
-- ❌ **Mal**: Validar todo el código en cada commit = PRs enormes e imposibles de revisar
-- ✅ **Bien**: Validar solo cambios = PRs manejables, mejora incremental
-
-Este sistema simula exactamente eso: valida calidad en código nuevo sin forzar refactor completo del legacy.
-
-## 📚 Tecnologías
-
-- **PHP**: >=7.4
-- **PHPCS**: 3.7+ (PSR-12)
-- **ESLint**: 8.56+
-- **Git**: Para detección de cambios
+| Aspecto | Antes | Ahora |
+|---------|-------|-------|
+| Valida todo el código | ❌ | ✅ Solo modificados |
+| Bloquea por estilo | ❌ | ✅ Solo warnings |
+| Detecta sintaxis | ❌ | ✅ php -l |
+| Detecta funciones | ❌ | ✅ PHPStan |
+| Output | Confuso | ✅ Resumen claro |
 
 ## 🤝 Contribuir
 
-Este es un proyecto de prueba. Puedes modificar:
-
-- Reglas de linting en `config/phpcs.xml` y `config/.eslintrc.json`
-- Script principal en `scripts/lint.php`
-- Agregar más archivos de ejemplo
+Para agregar más validaciones, edita `lint.sh` y agrega pasos en `lint_php_files()` o `lint_js_files()`.
 
 ## 📄 Licencia
 

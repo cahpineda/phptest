@@ -11,7 +11,13 @@
       "Bash(ls:*)",
       "Bash(git checkout:*)",
       "Bash(vendor/bin/phpcs:*)",
-      "Bash(src/Controllers/UserController.php << 'EOF'\n\n    // Nueva función con errores intencionales\n    public function testLinter\\($param1,$param2\\){\n        $result=$param1+$param2\n        if\\($result>10\\){return true}\n        return false;\n    }\n}\nEOF)"
+      "Bash(src/Controllers/UserController.php << 'EOF'\n\n    // Nueva función con errores intencionales\n    public function testLinter\\($param1,$param2\\){\n        $result=$param1+$param2\n        if\\($result>10\\){return true}\n        return false;\n    }\n}\nEOF)",
+      "Bash(/tmp/test_syntax.php << 'EOF'\n<?php\nclass Test {\n    public function bad\\(\\) {\n        echo \"test\"\n    }\n}\nEOF)",
+      "Bash(git reset:*)",
+      "Bash(composer require:*)",
+      "Bash(curl:*)",
+      "Bash(vendor/bin/phpstan analyse:*)",
+      "Bash(SKIP_STYLE=1 ./lint.sh:*)"
     ]
   }
 }
