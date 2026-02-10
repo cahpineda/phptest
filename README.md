@@ -27,8 +27,7 @@ phptest/
 │   │   ├── legacy.js       # JS con <?php header + funciones legacy
 │   │   └── modern.js       # JS moderno + window.apiUtils
 │   └── index.php           # Entry point
-├── scripts/
-│   └── lint.php            # Script principal de linting
+ de linting
 ├── src/
 │   ├── Controllers/
 │   │   ├── ProductController.php
@@ -44,7 +43,14 @@ phptest/
 
 ## 🚀 Instalación
 
-### Opción 1: Con Composer instalado
+### Requisitos
+
+- PHP >= 7.4
+- Composer
+- Node.js / npm
+- Git
+
+### Instalación de dependencias
 
 ```bash
 # Instalar dependencias PHP
@@ -52,31 +58,6 @@ composer install
 
 # Instalar dependencias JavaScript
 npm install
-```
-
-### Opción 2: Sin Composer (descarga manual de PHPCS)
-
-```bash
-# Crear directorio vendor si no existe
-mkdir -p vendor/bin
-
-# Descargar PHPCS
-curl -L https://squizlabs.github.io/PHP_CodeSniffer/phpcs.phar -o vendor/bin/phpcs
-curl -L https://squizlabs.github.io/PHP_CodeSniffer/phpcbf.phar -o vendor/bin/phpcbf
-
-# Hacer ejecutables
-chmod +x vendor/bin/phpcs
-chmod +x vendor/bin/phpcbf
-
-# Instalar dependencias JavaScript
-npm install
-```
-
-### Opción 3: Script de instalación automatizado
-
-```bash
-# Ejecutar script de instalación
-php scripts/install.php
 ```
 
 ## 📝 Uso
